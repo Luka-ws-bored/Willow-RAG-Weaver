@@ -1,119 +1,80 @@
 import { useState } from 'react';
+import { Sidebar } from '@/components/Sidebar';
+import { FileUpload } from '@/components/FileUpload';
+import { ChatBox } from '@/components/ChatBox';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
-
-// API client
-const API_BASE_URL = 'https://your-backend.com/api/v6';
-
-async function ragQuery(prompt: string) {
-  const res = await fetch(`${API_BASE_URL}/rag`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: prompt }),
-  });
-  if (!res.ok) throw new Error('RAG request failed');
-  return res.json(); // { answer: string, sourceDocs?: [...] }
-}
-
-async function uploadFileToRAG(file: File) {
-  const data = new FormData();
-  data.append('document', file);
-  const res = await fetch(`${API_BASE_URL}/upload`, {
-    method: 'POST',
-    body: data,
-  });
-  if (!res.ok) throw new Error('Upload to RAG failed');
-  return res.json();
-}
-
-async function uploadFileToSupabase(file: File) {
-  const text = await file.text();
-  await supabase.from('documents').insert([
-    {
-      filename: file.name,
-      content: text,
-    },
-  ]);
-}
-
-async function saveMessageToSupabase(role: 'user' | 'bot', message: string) {
-  await supabase.from('chat_history').insert([
-    {
-      role,
-      message,
-    },
-  ]);
-}
+import { Moon, Sun, Github } from 'lucide-react';
 
 const Index = () => {
-  const [prompt, setPrompt] = useState('');
-  const [messages, setMessages] = useState<Array<{ from: 'user' | 'bot', text: string }>>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string>('default');
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
-  async function send() {
-    if (!prompt.trim()) return;
-    setMessages(m => [...m, { from: 'user', text: prompt }]);
-    await saveMessageToSupabase('user', prompt);
-    setPrompt('');
-    try {
-      const { answer } = await ragQuery(prompt);
-      setMessages(m => [...m, { from: 'bot', text: answer }]);
-      await saveMessageToSupabase('bot', answer);
-    } catch (err: any) {
-      const errorMsg = 'Error: ' + err.message;
-      setMessages(m => [...m, { from: 'bot', text: errorMsg }]);
-      await saveMessageToSupabase('bot', errorMsg);
-    }
-  }
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
+    document.documentElement.classList.toggle('dark');
+  };
 
-  async function handleUpload() {
-    if (!file) return;
-    setUploadStatus('Uploading...');
-    try {
-      await uploadFileToRAG(file);
-      await uploadFileToSupabase(file);
-      setUploadStatus('Uploaded successfully ✅');
-    } catch (err: any) {
-      setUploadStatus('Upload failed ❌');
-    }
-  }
+  const handleSessionSelect = (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+  };
+
+  const handleUploadComplete = () => {
+    // Optionally refresh sidebar or show success message
+  };
 
   return (
-    <div className="min-h-screen bg-background p-6 space-y-8">
-      <header className="text-3xl font-bold">🌿 Willow v6 + Supabase</header>
-
-      {/* Chat Interface */}
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold">💬 Ask Willow</h2>
-        {messages.map((m, i) => (
-          <Card key={i} className={m.from === 'bot' ? 'bg-muted/50' : 'bg-card'}>
-            <CardContent className="p-3">{m.text}</CardContent>
-          </Card>
-        ))}
-        <div className="flex gap-2">
-          <Input
-            placeholder="Ask anything..."
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && send()}
-          />
-          <Button onClick={send}>Send</Button>
+    <div className={`min-h-screen bg-background ${isDarkMode ? 'dark' : ''}`}>
+      {/* Header */}
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="text-2xl">🌿</div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Willow RAG Weaver
+            </h1>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="ghost" size="sm" onClick={toggleTheme}>
+              {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer">
+                <Github className="h-4 w-4" />
+              </a>
+            </Button>
+          </div>
         </div>
-      </section>
+      </header>
 
-      {/* Upload Interface */}
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold">📄 Upload Document</h2>
-        <input
-          type="file"
-          onChange={e => setFile(e.target.files?.[0] || null)}
-        />
-        <Button onClick={handleUpload} disabled={!file}>Upload</Button>
-        {uploadStatus && <p className="text-sm text-muted-foreground">{uploadStatus}</p>}
-      </section>
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="space-y-6">
+              <FileUpload onUploadComplete={handleUploadComplete} />
+              <Sidebar 
+                onSessionSelect={handleSessionSelect}
+              />
+            </div>
+          </div>
+
+          {/* Chat Area */}
+          <div className="lg:col-span-3">
+            <ChatBox sessionId={currentSessionId} />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer className="mt-16 pt-8 border-t text-center text-sm text-muted-foreground">
+          <p>
+            Built with React, Tailwind CSS, Supabase, and OpenAI • 
+            <a href="#" className="text-primary hover:underline ml-1">
+              Deploy to Vercel
+            </a>
+          </p>
+        </footer>
+      </div>
     </div>
   );
 };
