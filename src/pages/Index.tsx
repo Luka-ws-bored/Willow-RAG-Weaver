@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { supabase } from '@/integrations/supabase/client';
 
 // API client
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://your-backend.example.com/api/v6';
+const API_BASE_URL = 'https://your-backend.com/api/v6';
+
 async function ragQuery(prompt: string) {
   const res = await fetch(`${API_BASE_URL}/rag`, {
     method: 'POST',
@@ -15,15 +17,34 @@ async function ragQuery(prompt: string) {
   return res.json(); // { answer: string, sourceDocs?: [...] }
 }
 
-async function uploadFile(file: File) {
+async function uploadFileToRAG(file: File) {
   const data = new FormData();
   data.append('document', file);
   const res = await fetch(`${API_BASE_URL}/upload`, {
     method: 'POST',
     body: data,
   });
-  if (!res.ok) throw new Error('Upload failed');
+  if (!res.ok) throw new Error('Upload to RAG failed');
   return res.json();
+}
+
+async function uploadFileToSupabase(file: File) {
+  const text = await file.text();
+  await supabase.from('documents').insert([
+    {
+      filename: file.name,
+      content: text,
+    },
+  ]);
+}
+
+async function saveMessageToSupabase(role: 'user' | 'bot', message: string) {
+  await supabase.from('chat_history').insert([
+    {
+      role,
+      message,
+    },
+  ]);
 }
 
 const Index = () => {
@@ -35,12 +56,16 @@ const Index = () => {
   async function send() {
     if (!prompt.trim()) return;
     setMessages(m => [...m, { from: 'user', text: prompt }]);
+    await saveMessageToSupabase('user', prompt);
     setPrompt('');
     try {
       const { answer } = await ragQuery(prompt);
       setMessages(m => [...m, { from: 'bot', text: answer }]);
+      await saveMessageToSupabase('bot', answer);
     } catch (err: any) {
-      setMessages(m => [...m, { from: 'bot', text: 'Error: ' + err.message }]);
+      const errorMsg = 'Error: ' + err.message;
+      setMessages(m => [...m, { from: 'bot', text: errorMsg }]);
+      await saveMessageToSupabase('bot', errorMsg);
     }
   }
 
@@ -48,7 +73,8 @@ const Index = () => {
     if (!file) return;
     setUploadStatus('Uploading...');
     try {
-      await uploadFile(file);
+      await uploadFileToRAG(file);
+      await uploadFileToSupabase(file);
       setUploadStatus('Uploaded successfully ✅');
     } catch (err: any) {
       setUploadStatus('Upload failed ❌');
@@ -57,7 +83,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-8">
-      <header className="text-3xl font-bold">🌿 Willow v6-Beta</header>
+      <header className="text-3xl font-bold">🌿 Willow v6 + Supabase</header>
 
       {/* Chat Interface */}
       <section className="space-y-4">
